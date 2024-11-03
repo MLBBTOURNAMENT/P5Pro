@@ -89,6 +89,9 @@ class Player(pygame.sprite.Sprite):
         self.double_jump_available = True
         self.facing_right = True
         
+        self.max_speed = 5  # Kecepatan maksimum
+        self.acceleration = 0.5  # Percepatan
+        
         print("Available animations:", list(self.SPRITES.keys()))
 
     def apply_movement(self):
@@ -103,17 +106,20 @@ class Player(pygame.sprite.Sprite):
         
         # Update position horizontally first
         self.rect.x += int(self.vel_x)
+        self.handle_horizontal_collision()
         # Check for horizontal collisions
         blocks_hit = pygame.sprite.spritecollide(self, self.game.blocks, False)
         for block in blocks_hit:
             if self.vel_x > 0:  # Moving right
-                self.rect.right = block.rect.left
+                self.rect.right = min(WIDTH, self.rect.right)
             elif self.vel_x < 0:  # Moving left
-                self.rect.left = block.rect.right
+                self.rect.left = max(0, self.rect.left)
             self.vel_x = 0
     
         # Update position vertically
         self.rect.y += int(self.vel_y)
+        self.handle_vertical_collision()
+        
         # Check for vertical collisions
         blocks_hit = pygame.sprite.spritecollide(self, self.game.blocks, False)
         for block in blocks_hit:
@@ -177,7 +183,6 @@ class Player(pygame.sprite.Sprite):
             if not self.jumping:
                 self.vel_y = self.jump_power
                 self.jumping = True
-                print("First jump executed")
             elif self.double_jump_available:
                 self.vel_y = self.jump_power
                 self.double_jump_available = False
@@ -187,9 +192,28 @@ class Player(pygame.sprite.Sprite):
             traceback.print_exc()
 
     def update(self):
+        # Get joystick input
+        joy_x, joy_y = self.game.joystick.get_value()
+    
+        # Apply horizontal movement
+        if abs(joy_x) > 0.1:  # Dead zone
+            self.vel_x += joy_x * self.acceleration
+        else:
+            self.vel_x *= 0.9  # Friction when no input
+    
+        # Limit horizontal speed
+        self.vel_x = max(-self.max_speed, min(self.max_speed, self.vel_x))
+    
+        # Update facing direction
+        if self.vel_x > 0:
+            self.facing_right = True
+        elif self.vel_x < 0:
+            self.facing_right = False
+    
+        self.apply_gravity()
         self.apply_movement()
         self.update_sprite()
-
+        
     def jump(self):
         try:
             if not self.jumping:
@@ -211,6 +235,41 @@ class Player(pygame.sprite.Sprite):
     def move_right(self):
         self.vel_x += self.acceleration
         self.facing_right = True
+        
+    def apply_gravity(self):
+        self.vel_y += self.gravity
+        if self.vel_y > 10:  # Terminal velocity
+            self.vel_y = 10
+    
+    def apply_movement(self):
+        # Update horizontal position
+        self.rect.x += int(self.vel_x)
+        self.handle_horizontal_collision()
+        
+        # Update vertical position
+        self.rect.y += int(self.vel_y)
+        self.handle_vertical_collision()
+    
+    def handle_horizontal_collision(self):
+        hits = pygame.sprite.spritecollide(self, self.game.blocks, False)
+        if hits:
+            if self.vel_x > 0:
+                self.rect.right = hits[0].rect.left
+            if self.vel_x < 0:
+                self.rect.left = hits[0].rect.right
+            self.vel_x = 0
+    
+    def handle_vertical_collision(self):
+        hits = pygame.sprite.spritecollide(self, self.game.blocks, False)
+        if hits:
+            if self.vel_y > 0:
+                self.rect.bottom = hits[0].rect.top
+                self.vel_y = 0
+                self.jumping = False
+                self.double_jump_available = True
+            if self.vel_y < 0:
+                self.rect.top = hits[0].rect.bottom
+                self.vel_y = 0
 
 class NPC(pygame.sprite.Sprite):
     def __init__(self, x, y, name):
@@ -300,6 +359,11 @@ class NPC(pygame.sprite.Sprite):
         self.title_font = pygame.font.Font(None, 48)
         self.question_font = pygame.font.Font(None, 36)
 
+
+        self.question_timer = 15  # waktu dalam detik untuk setiap pertanyaan
+        self.timer_start = 0
+        self.timer_running = False
+        self.font_timer = pygame.font.Font(None, 48)
         
         self.create_buttons()
         
@@ -359,6 +423,27 @@ class NPC(pygame.sprite.Sprite):
                 title_rect = title_surface.get_rect(centerx=WIDTH//2, top=50)
                 screen.blit(title_surface, title_rect)
 
+                # Timer display
+                if self.timer_running:
+                    current_time = pygame.time.get_ticks()
+                    elapsed_time = (current_time - self.timer_start) // 1000
+                    remaining_time = max(0, self.question_timer - elapsed_time)
+
+                    # Jika waktu habis, pindah ke pertanyaan berikutnya
+                    if remaining_time == 0:
+                        self.result_message = "Time's up!"
+                        self.show_result = True
+                        self.result_timer = 60
+                        self.move_to_random_question()
+                        return
+
+                    # Tampilkan timer
+                    timer_text = f"Time: {remaining_time}"
+                    timer_color = RED if remaining_time <= 5 else WHITE
+                    timer_surface = self.font_timer.render(timer_text, True, timer_color)
+                    timer_rect = timer_surface.get_rect(centerx=WIDTH//2, top=10)
+                    screen.blit(timer_surface, timer_rect)
+
                 # Score dan nomor pertanyaan
                 score_text = f"Score: {self.score}"
                 score_surface = self.font.render(score_text, True, WHITE)
@@ -382,9 +467,9 @@ class NPC(pygame.sprite.Sprite):
                 start_y = 250
 
                 for i, (button, option) in enumerate(zip(self.buttons, options)):
-                    button_rect = pygame.Rect((WIDTH - button_width) // 2, 
-                                              start_y + i * (button_height + button_spacing),
-                                              button_width, button_height)
+                    button_rect = pygame.Rect((WIDTH - button_width) // 2,
+                                            start_y + i * (button_height + button_spacing),
+                                            button_width, button_height)
                     button['rect'] = button_rect  # Update button rect
 
                     # Warna button
@@ -403,9 +488,9 @@ class NPC(pygame.sprite.Sprite):
                     screen.blit(result_surface, result_rect)
 
                 # Tombol back di pojok kanan bawah
-                pygame.draw.rect(screen, 
-                               self.button_hover_color if self.back_button['hover'] else self.button_color, 
-                               self.back_button['rect'], 
+                pygame.draw.rect(screen,
+                               self.button_hover_color if self.back_button['hover'] else self.button_color,
+                               self.back_button['rect'],
                                border_radius=5)
                 back_text_surface = self.font.render(self.back_button['text'], True, WHITE)
                 back_text_rect = back_text_surface.get_rect(center=self.back_button['rect'].center)
@@ -418,26 +503,24 @@ class NPC(pygame.sprite.Sprite):
             if self.back_button['rect'].collidepoint(pos):
                 self.show_dialog = False
                 self.show_result = False
+                self.timer_running = False
                 return True
 
             current_q = self.questions[self.current_question_index]
-            
+
             for button in self.buttons:
                 if button['rect'].collidepoint(pos):
                     if button['index'] == current_q['correct']:
-                        # Correct answer
-                        self.score += 1  # Increment score
+                        self.score += 1
                         self.result_message = "Correct!"
                         self.show_correct_animation(button['rect'])
                     else:
-                        # Wrong answer
                         self.result_message = "Wrong! The correct answer was: " + current_q['options'][current_q['correct']]
                         self.show_wrong_animation(button['rect'])
-                    
+
                     self.show_result = True
                     self.result_timer = 60
-                    
-                    # Always move to next random question after answering
+                    self.timer_running = False
                     self.move_to_random_question()
                     return True
         return False
@@ -447,7 +530,10 @@ class NPC(pygame.sprite.Sprite):
                              if i != self.current_question_index]
         if available_questions:
             self.current_question_index = random.choice(available_questions)
-        self.create_buttons()  # Recreate buttons for new question
+            # Reset timer untuk pertanyaan baru
+            self.timer_start = pygame.time.get_ticks()
+            self.timer_running = True
+        self.create_buttons()
 
     def can_interact(self, player):
         # Calculate distance between NPC and player
@@ -473,12 +559,23 @@ class NPC(pygame.sprite.Sprite):
 
     def update(self):
         self.update_sprite()
-        
+
         # Update result timer
         if self.result_timer > 0:
             self.result_timer -= 1
             if self.result_timer == 0:
                 self.show_result = False
+
+        # Check timer jika dialog sedang aktif
+        if self.show_dialog and self.timer_running:
+            current_time = pygame.time.get_ticks()
+            elapsed_time = (current_time - self.timer_start) // 1000
+            if elapsed_time >= self.question_timer:
+                self.result_message = "Time's up!"
+                self.show_result = True
+                self.result_timer = 60
+                self.timer_running = False
+                self.move_to_random_question()
 
     
     def create_buttons(self):
@@ -531,23 +628,36 @@ class NPC(pygame.sprite.Sprite):
     def update(self):
         self.update_sprite()
 class Block(pygame.sprite.Sprite):
-    def __init__(self, x, y, size=32):  # increased size for better visibility
+    def __init__(self, x, y, terrain_type, size=32):
         super().__init__()
         try:
             # Load the terrain sprite sheet
             sprite_sheet = pygame.image.load(os.path.join("assets", "Terrain (16x16).png")).convert_alpha()
+            
+            # Define the positions of different terrain types in the sprite sheet
+            terrain_positions = {
+                "grass": (0, 0),
+                "dirt": (0, 16),
+                "stone": (0, 32),
+                # Add more terrain types as needed
+            }
+            
+            # Get the position of the desired terrain type
+            sheet_x, sheet_y = terrain_positions.get(terrain_type, (0, 0))
+            
             # Create a surface for our block
             self.image = pygame.Surface((size, size), pygame.SRCALPHA)
+            
             # Scale and draw the terrain texture onto our block
-            scaled_terrain = pygame.transform.scale(sprite_sheet.subsurface((0, 0, 16, 16)), (size, size))
+            terrain_surface = sprite_sheet.subsurface((sheet_x, sheet_y, 16, 16))
+            scaled_terrain = pygame.transform.scale(terrain_surface, (size, size))
             self.image.blit(scaled_terrain, (0, 0))
+            
         except pygame.error as e:
             print(f"Error loading sprite: {e}")
             self.image = pygame.Surface((size, size))
             self.image.fill((100, 100, 100))  # Gray color for missing texture
         
-        self.image = pygame.Surface((size, size))
-        self.image.fill((100, 100, 100))  # Gray color
         self.rect = self.image.get_rect()
         self.rect.x = x
         self.rect.y = y
@@ -588,6 +698,19 @@ class VirtualJoystick:
             x = self.position[0] + math.cos(angle) * self.radius
             y = self.position[1] + math.sin(angle) * self.radius
             return (int(x), int(y))
+        
+    def update(self):
+        # Update joystick state based on mouse input
+        mouse_pos = pygame.mouse.get_pos()
+        mouse_pressed = pygame.mouse.get_pressed()[0]  # Left mouse button
+
+        if mouse_pressed:
+            if self.active or math.dist(mouse_pos, self.position) <= self.radius:
+                self.active = True
+                self.touch_position = mouse_pos
+        else:
+            self.active = False
+            self.touch_position = None
     
     def get_value(self):
         if not self.active or not self.touch_position:
@@ -619,48 +742,86 @@ class TouchButton:
 # Modify the Game class to include touch controls
 class Game:
     def __init__(self):
-        # ... (existing initialization code) ...
         
         # Add touch controls
         self.joystick = VirtualJoystick()
         self.jump_button = TouchButton(WIDTH - 150, HEIGHT - 150, 100, 100, "Jump")
         self.interact_button = TouchButton(WIDTH - 150, HEIGHT - 270, 100, 100, "Action")
+        self.all_sprites = pygame.sprite.Group()
+        self.blocks = pygame.sprite.Group()
+        
+        self.create_level()
+        
+    def create_level(self):
+        # Contoh sederhana pembuatan level
+        # Anda bisa mengubah ini sesuai dengan desain level yang diinginkan
+        ground_y = HEIGHT - 64  # 64 piksel dari bawah layar
+        
+        # Membuat tanah
+        for x in range(0, WIDTH, 32):
+            if x == 0 or x == WIDTH - 32:
+                # Blok ujung menggunakan tekstur rumput
+                block = Block(x, ground_y, "grass")
+            else:
+                # Blok tengah menggunakan tekstur tanah
+                block = Block(x, ground_y, "dirt")
+            self.all_sprites.add(block)
+            self.blocks.add(block)
+        
+        # Membuat beberapa platform
+        platforms = [
+            (200, HEIGHT - 200, 5, "stone"),  # (x, y, width, type)
+            (500, HEIGHT - 300, 7, "grass"),
+            (800, HEIGHT - 150, 4, "stone"),
+        ]
+        
+        for plat in platforms:
+            x, y, width, terrain_type = plat
+            for i in range(width):
+                block = Block(x + i * 32, y, terrain_type)
+                self.all_sprites.add(block)
+                self.blocks.add(block)
         
     def events(self):
         try:
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     self.running = False
-                
-                # Handle touch/mouse events
+                elif event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_SPACE:
+                        self.player.jump()
+                    elif event.key == pygame.K_ESCAPE:
+                        if self.npc.show_dialog:
+                            self.npc.show_dialog = False
+                            self.npc.show_result = False
+                        else:
+                            self.running = False
                 elif event.type == pygame.MOUSEBUTTONDOWN:
                     pos = pygame.mouse.get_pos()
-                    
-                    # Check joystick
                     if math.dist(pos, self.joystick.position) <= self.joystick.radius:
                         self.joystick.active = True
                         self.joystick.touch_position = pos
-                    
-                    # Check buttons
-                    if self.jump_button.rect.collidepoint(pos):
+                    elif self.jump_button.rect.collidepoint(pos):
                         self.jump_button.pressed = True
                         self.player.jump()
-                    
-                    if self.interact_button.rect.collidepoint(pos):
+                    elif self.interact_button.rect.collidepoint(pos):
                         self.interact_button.pressed = True
                         if self.npc.can_interact(self.player):
                             self.npc.show_dialog = True
-                
+                    elif self.npc.show_dialog:
+                        self.npc.handle_click(pos)
                 elif event.type == pygame.MOUSEBUTTONUP:
                     self.joystick.active = False
                     self.joystick.touch_position = None
                     self.jump_button.pressed = False
                     self.interact_button.pressed = False
-                
                 elif event.type == pygame.MOUSEMOTION:
+                    mouse_pos = pygame.mouse.get_pos()  # Get current mouse position
                     if self.joystick.active:
-                        self.joystick.touch_position = pygame.mouse.get_pos()
-            
+                        self.joystick.touch_position = mouse_pos
+                    if self.npc.show_dialog:
+                        self.npc.handle_hover(mouse_pos)
+
             # Handle joystick movement
             if self.joystick.active:
                 x_value, _ = self.joystick.get_value()
@@ -668,9 +829,31 @@ class Game:
                     self.player.move_left()
                 elif x_value > 0.2:
                     self.player.move_right()
-            
+
+            # Handle continuous key presses
+            keys = pygame.key.get_pressed()
+            if keys[pygame.K_LEFT] or keys[pygame.K_a]:
+                self.player.move_left()
+            if keys[pygame.K_RIGHT] or keys[pygame.K_d]:
+                self.player.move_right()
+
         except Exception as e:
             print(f"Error in events: {e}")
+            
+    def handle_events(self):
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                self.running = False
+            elif event.type == pygame.MOUSEBUTTONDOWN:
+                if self.jump_button.rect.collidepoint(event.pos):
+                    self.player.jump()
+
+        # Handle continuous joystick input
+        joy_x, joy_y = self.joystick.get_value()
+        if abs(joy_x) > 0.1:  # Apply dead zone
+            self.player.vel_x = joy_x * self.player.max_speed
+        else:
+            self.player.vel_x *= 0.9  # Apply friction when no input
 
     def draw(self):
         screen.fill(BLACK)
@@ -681,7 +864,7 @@ class Game:
         self.jump_button.draw(screen)
         self.interact_button.draw(screen)
         
-        # ... (rest of the existing draw code) ...
+        pygame.display.flip()
 
 class Game:
     def __init__(self):
@@ -769,6 +952,7 @@ class Game:
 
     def update(self):
         self.all_sprites.update()
+        self.joystick.update()  # Update joystick position if needed
 
     def draw(self):
         screen.fill(BLACK)
