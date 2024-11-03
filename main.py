@@ -5,6 +5,9 @@ import sys
 import os
 import traceback
 import math
+import streamlit as st
+import pandas as pd
+import numpy as np
 
 # Initialize Pygame and mixer
 pygame.init()
@@ -194,22 +197,22 @@ class Player(pygame.sprite.Sprite):
     def update(self):
         # Get joystick input
         joy_x, joy_y = self.game.joystick.get_value()
-    
+
         # Apply horizontal movement
         if abs(joy_x) > 0.1:  # Dead zone
             self.vel_x += joy_x * self.acceleration
         else:
             self.vel_x *= 0.9  # Friction when no input
-    
+
         # Limit horizontal speed
         self.vel_x = max(-self.max_speed, min(self.max_speed, self.vel_x))
-    
+
         # Update facing direction
         if self.vel_x > 0:
             self.facing_right = True
         elif self.vel_x < 0:
             self.facing_right = False
-    
+
         self.apply_gravity()
         self.apply_movement()
         self.update_sprite()
