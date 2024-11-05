@@ -1,0 +1,30 @@
+services:
+  # Web service
+  - type: web
+    name: your-app-name
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: python main.py
+    region: indonesia  # or choose another region
+    plan: free  # or paid plans like 'starter', 'standard'
+    branch: main
+    healthCheckPath: /
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.9.16
+      - key: PORT
+        value: 10000
+    autoDeploy: true
+
+    # If you need any background workers, you can add them like this:
+    # - type: worker
+    #   name: your-worker-name
+    #   env: python
+    #   buildCommand: pip install -r requirements.txt
+    #   startCommand: python worker.py
+    #   plan: free
+
+    # If you need a database, you can add it like this:
+    # databases:
+    #   - name: your-db-name
+    #     plan: free
