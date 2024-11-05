@@ -1,16 +1,16 @@
 import pygame
 from pygame import mixer
 import random
-import sys
+import sys 
 import os
 import traceback
 import math
 import random
 import asyncio
-from http.server import HTTPServer, SimpleHTTPRequestHandler
-from flask import Flask
+import asyncio
 
-app = Flask(__name__)
+# Add more Streamlit components as needed
+
 
 # Initialize Pygame and mixer
 pygame.init()
@@ -35,8 +35,19 @@ YELLOW = (255, 255, 0)
 PURPLE = (147, 0, 211)
 CYAN = (0, 255, 255)
 
+async def main():
+    global COUNT_DOWN
 
-@app.route('/')
+    # avoid this kind declaration, prefer the way above
+    COUNT_DOWN = 3
+
+    while True:
+        
+        await asyncio.sleep(0)  # Very important, and keep it 0
+
+        if not COUNT_DOWN:
+            return
+
 def load_sprite_sheets(dir1, width, height, direction=False):
     path = os.path.join("assets", dir1)
     
@@ -66,19 +77,6 @@ def load_sprite_sheets(dir1, width, height, direction=False):
             all_sprites[image.replace(".png", "")] = sprites
 
     return all_sprites
-
-class Handler(SimpleHTTPRequestHandler):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, directory=os.path.dirname(__file__), **kwargs)
-
-def run(server_class=HTTPServer, handler_class=Handler, port=8000):
-    server_address = ('', port)
-    httpd = server_class(server_address, handler_class)
-    print(f"Serving on port {port}")
-    httpd.serve_forever()
-
-if __name__ == "__main__":
-    run()
 
 class Player(pygame.sprite.Sprite):
     def __init__(self, game):
